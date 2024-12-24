@@ -2,14 +2,26 @@
 
 Oleh: Polikarpus Arya Pradhanika
 
-### How to run?
+### Setup Environtment Anaconda
 
-- Ekstrak folder projek.
-- Melalui terminal, pergilah ke ke folder tugas akhir dengan perintah
-  ```
-  cd tugas-akhir/
-  ```
-- Jalankan streamlit dengan perintah berikut
-  ```
-  streamlit run dashboard.py
-  ```
+```
+conda create --name main-ds python=3.12
+conda activate main-ds
+pip install -r requirements.txt
+```
+
+### Setup Environtment - Shell/Terminal
+
+```
+mkdir dicoding-ta-dasci
+cd dicoding-ta-dasci
+pipenv install
+pipenv shell
+pip install -r requirements.txt
+```
+
+### Run streamlit app
+
+```
+streamlit run dashboard.py
+```
