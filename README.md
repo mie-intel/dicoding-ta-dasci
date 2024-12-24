@@ -2,6 +2,10 @@
 
 Oleh: Polikarpus Arya Pradhanika
 
+### Deployment
+
+https://polikarpus-dicoding-ta-dasci.streamlit.app/
+
 ### Setup Environtment Anaconda
 
 ```
