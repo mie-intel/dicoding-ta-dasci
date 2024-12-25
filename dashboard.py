@@ -1,6 +1,7 @@
 # Ini adalah dashboard streamlit
 
 # Import library
+import math
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -26,7 +27,7 @@ day_val = {0: 'Minggu', 1: 'Senin', 2: 'Selasa',
            3: 'Rabu', 4: 'Kamis', 5: 'Jumat', 6: 'Sabtu'}
 
 
-def create_and_show_df(file_name, title):
+def create_df(file_name):
     # Baca data
     df = pd.read_csv(file_name)
 
@@ -38,8 +39,6 @@ def create_and_show_df(file_name, title):
 
     # Ubah format data dteday
     df["dteday"] = pd.to_datetime(df["dteday"])
-    st.subheader(title)
-    st.write(df.head())
     return df
 
 
@@ -119,9 +118,51 @@ def create_day_cat_df(day_df):
     return day_cat_df
 
 
+def show_df(df, title):
+    st.subheader(title)
+    st.write(df.head())
+
+
 # Membaca data
-day_df = create_and_show_df("day.csv", "Data Harian*")
-hour_df = create_and_show_df("hour.csv", "Data Tiap Jam*")
+raw_day_df = create_df("day.csv")
+raw_hour_df = create_df("hour.csv")
+
+min_date = raw_day_df['dteday'].min()
+max_date = raw_day_df['dteday'].max()
+cur_min_date = min_date
+cur_max_date = max_date
+
+
+def filter_data(df, start_date, end_date):
+    return df[(df['dteday'] >= str(start_date)) & (df['dteday'] <= str(end_date))]
+
+
+with st.sidebar:
+    st.write("Filter Data")
+    try:
+        start_date, end_date = st.date_input(
+            label="Rentang tanggal",
+            min_value=min_date,
+            max_value=max_date,
+            value=[cur_min_date, cur_max_date]
+        )
+        cur_min_date = start_date
+        cur_max_date = end_date
+
+    except ValueError:
+        st.write("Masukkan end date!")
+
+    if (st.button("Reset Filter")):
+        cur_min_date = min_date
+        cur_max_date = max_date
+
+
+day_df = filter_data(raw_day_df, cur_min_date, cur_max_date)
+hour_df = filter_data(raw_hour_df, cur_min_date, cur_max_date)
+
+
+show_df(day_df, "Data Harian*")
+show_df(hour_df, "Data Tiap Jam*")
 st.caption("*Hanya menampilkan 5 data teratas")
 
 st.markdown("""
@@ -141,13 +182,16 @@ ax.plot(month_df['dtemonth'],
         month_df['cnt'], marker='o', color='darkblue')
 
 # Menambahkan trendline menggunakan polynomial
-z = np.polyfit(month_df['dtemonth'].map(
-    dt.datetime.toordinal), month_df['cnt'], 2)
-p = np.poly1d(z)
-ax.plot(month_df['dtemonth'], p(
-    month_df['dtemonth'].map(dt.datetime.toordinal)), "r")
+if (month_df.shape[0] > 1):
+    z = np.polyfit(month_df['dtemonth'].map(
+        dt.datetime.toordinal), month_df['cnt'], 2)
+    p = np.poly1d(z)
+    ax.plot(month_df['dtemonth'], p(
+        month_df['dtemonth'].map(dt.datetime.toordinal)), "r")
 
-ax.set_title("Performa penjualan sepeda dari 2011 ke 2012",
+min_year = month_df['dtemonth'].dt.year.min()
+max_year = month_df['dtemonth'].dt.year.max()
+ax.set_title(f"Performa penjualan sepeda dari {min_year} ke {max_year}",
              loc="center", fontsize=20, pad=20)
 
 # Set untuk sumbu x
@@ -165,6 +209,18 @@ ax.set_yticks(np.arange(0, 8000, 1000))  # Set interval sumbu y
 # Menambahkan legend
 ax.legend(["Penjualan sepeda", "Trendline"], fontsize=12)
 st.pyplot(fig)
+
+# Menunjukkan peringkat bulan terbaik
+month_list = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+              'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+month_rank = day_df.groupby(by="mnth").agg({
+    'cnt': 'mean'
+}).reset_index()
+month_rank = month_rank.sort_values(by="cnt", ascending=False)
+best_month = month_list[math.floor(month_rank.iloc[0]['mnth']) - 1]
+worst_month = month_list[math.floor(month_rank.iloc[-1]['mnth']) - 1]
+best_month_rate = month_rank.iloc[0]['cnt']
+worst_month_rate = month_rank.iloc[-1]['cnt']
 
 # Membandingkan penjualan dari tahun 2011 dan 2022
 y2011_df = month_df[month_df['dtemonth'].dt.strftime("%Y") == '2011']
@@ -186,14 +242,26 @@ ax.tick_params(axis='y', labelsize=13)
 ax.legend(loc='upper left', fontsize=13)
 st.pyplot(fig)
 
-st.markdown("""
+st.markdown(f"""
 ### 🌟 **Insight**
 
-* Grafik ini menunjukkan bahwa terjadi **peningkatan** penjualan sepeda dari tahun 2011 menuju 2012.
-* penggunaan sepeda cenderung mengalami peningkatan di bulan Juni hingga Oktober dan cenderung turun di bulan Desember hingga Februari
+* Grafik ini menunjukkan bahwa terjadi **peningkatan** penjualan sepeda dari tahun {min_year} menuju {max_year}.
+* Penggunaan sepeda cenderung mengalami peningkatan di bulan {best_month} dengan rerata {best_month_rate:.2f} dan cenderung turun di bulan {worst_month} dengan rerata {worst_month_rate:.2f}
 """)
 
 # Perbandingkan berdasarkan musim
+
+# Mencari musim terbaik
+season_rank = season_df.groupby(by="season").agg({
+    'cnt': 'mean'
+}).reset_index()
+best_season = season_rank[season_rank['cnt'] ==
+                          season_rank['cnt'].max()]['season'].values[0]
+worst_season = season_rank[season_rank['cnt'] ==
+                           season_rank['cnt'].min()]['season'].values[0]
+best_season_rate = season_rank['cnt'].max()
+worst_season_rate = season_rank['cnt'].min()
+
 # Pisahkan data
 y2011_season_df = season_df[season_df['yr'] == 2011]
 y2012_season_df = season_df[season_df['yr'] == 2012]
@@ -207,10 +275,11 @@ ax.bar((y2012_season_df['season'] + " " + y2012_season_df["yr"].astype(str)),
 
 # Menambahkan trendline
 # Menambahkan trendline menggunakan linear
-z = np.polyfit(np.arange(len(season_df)), season_df['cnt'], 1)
-p = np.poly1d(z)
-ax.plot((season_df['season'] + " " + season_df["yr"].astype(str)),
-        p(np.arange(len(season_df))), "black", label='Trend', linewidth=2)
+if (season_df.shape[0] > 1):
+    z = np.polyfit(np.arange(len(season_df)), season_df['cnt'], 1)
+    p = np.poly1d(z)
+    ax.plot((season_df['season'] + " " + season_df["yr"].astype(str)),
+            p(np.arange(len(season_df))), "black", label='Trend', linewidth=2)
 
 ax.set_title("Perbandingan penggunaan sepeda berdasarkan musim",
              loc="center", fontsize=20, pad=20)
@@ -222,15 +291,27 @@ ax.tick_params(axis='x', rotation=45, labelsize=13)
 ax.tick_params(axis='y', labelsize=13)
 st.pyplot(fig)
 
-st.markdown("""
+st.markdown(f"""
 # 🌟 **Insight**
 
-* Terlihat bahwa dalam setiap tahun, penjualan paling **tinggi** terjadi pada **musim gugur** dan **terendah** pada **musim semi**
-* Pada tahun 2012, penjualan mengalami **kenaikan** dibandingkan tahun 2011
+* Terlihat bahwa dalam setiap tahun, penjualan paling **tinggi** terjadi pada **musim {best_season}** dengan rerata {best_season_rate:.2f} dan **terendah** pada **musim {worst_season}** dengan rerata {worst_season_rate:.2f}
 """)
 
 
 # Menunjukkan performa penjualan sepeda berdasarkan cuaca
+# Cari yang terbaik
+
+# Mencari cuaca terbaik
+weather_rank = weather_df.groupby(by="weathersit").agg({
+    'cnt': 'mean'
+}).reset_index()
+best_weather = weather_rank[weather_rank['cnt'] ==
+                            weather_rank['cnt'].max()]['weathersit'].values[0]
+worst_weather = weather_rank[weather_rank['cnt'] ==
+                             weather_rank['cnt'].min()]['weathersit'].values[0]
+best_weather_rate = weather_rank['cnt'].max()
+worst_weather_rate = weather_rank['cnt'].min()
+
 # Pisahkan data
 y2011_weather_df = weather_df[weather_df['yr'] == 2011]
 y2012_weather_df = weather_df[weather_df['yr'] == 2012]
@@ -246,10 +327,12 @@ ax.bar((y2012_weather_df['weathersit'] + " " + y2012_weather_df["yr"].astype(str
 ax.set_title("Perbandingan penggunaan sepeda berdasarkan cuaca",
              loc="center", fontsize=20, pad=20)
 
-z = np.polyfit(np.arange(len(weather_df)), weather_df['cnt'], 1)
-p = np.poly1d(z)
-ax.plot((weather_df['weathersit'] + " " + weather_df["yr"].astype(str)),
-        p(np.arange(len(weather_df))), "black", label='Trend', linewidth=2)
+if (weather_df.shape[0] > 1):
+    z = np.polyfit(np.arange(len(weather_df)), weather_df['cnt'], 1)
+    p = np.poly1d(z)
+    ax.plot((weather_df['weathersit'] + " " + weather_df["yr"].astype(str)),
+            p(np.arange(len(weather_df))), "black", label='Trend', linewidth=2)
+
 ax.set_xlabel("Cuaca", fontsize=15)
 ax.set_ylabel("Jumlah sepeda (unit)", fontsize=15)
 ax.tick_params(axis='x', rotation=45, labelsize=13)
@@ -258,14 +341,28 @@ ax.legend(loc='upper left')
 ax.tick_params(axis='x', rotation=45)
 st.pyplot(fig)
 
-st.markdown("""
+st.markdown(f"""
 # 🌟 **Insight**
 
-* Terlihat bahwa dalam setiap tahun, penjualan paling **tinggi** terjadi pada **cuaca cerah** dan **terendah** pada **cuaca berawan**
-* Pada tahun 2012, penjualan mengalami **kenaikan** dibandingkan tahun 2011
+* Terlihat bahwa dalam setiap tahun, penjualan paling **tinggi** terjadi pada **cuaca {best_weather}** dengan rerata {best_weather_rate:.2f} dan **terendah** pada **cuaca {worst_weather}** dengan rerata {worst_weather_rate:.2f}
 """)
 
 # Menunjukkan performa penjualan sepeda berdasarkan jam
+
+# Mencari jam terbaik
+hour_rank = hour_cat_df.groupby(by="hr").agg({
+    'cnt': 'mean'
+}).reset_index()
+best_hour = hour_rank[hour_rank['cnt'] ==
+                      hour_rank['cnt'].max()]['hr'].values[0]
+worst_hour = hour_rank[hour_rank['cnt'] ==
+                       hour_rank['cnt'].min()]['hr'].values[0]
+best_hour = str(best_hour).zfill(2) + '.00'
+worst_hour = str(worst_hour).zfill(2) + '.00'
+
+best_hour_rate = hour_rank['cnt'].max()
+worst_hour_rate = hour_rank['cnt'].min()
+
 # Persiapkan data
 hour_cat_df = hour_cat_df.copy()
 hour_cat_df['hr_str'] = hour_cat_df['hr'].astype(
@@ -284,13 +381,22 @@ ax.set_ylabel("Jumlah sepeda (unit)", fontsize=15)
 ax.set_title("Rata - rata penggunaan sepeda per jam", fontsize=20, pad=20)
 st.pyplot(fig)
 
-st.markdown("""
+st.markdown(f"""
 # 🌟 **Insight**
 
-* Terlihat bahwa rata - rata penggunaan sepeda paling tinggi ada di pukul 17.00 dan paling rendah di pukul 04.00
-* Pada pagi hari(00.00 hingga 04.00) penggunaan sepeda cenderung **rendah**
-* Sementara pada sore hari(16.00 - 19.00) penggunaan sepeda cenderung **tinggi**
+* Terlihat bahwa rata - rata penggunaan sepeda paling tinggi ada di pukul {best_hour} dengan rerata {best_hour_rate:.2f} dan paling rendah di pukul {worst_hour} dengan rerata {worst_hour_rate:.2f}
 """)
+
+# Mencari hari terbaik
+day_rank = day_cat_df.groupby(by="weekday").agg({
+    'cnt': 'mean'
+}).reset_index()
+best_day = day_rank[day_rank['cnt'] ==
+                    day_rank['cnt'].max()]['weekday'].values[0]
+worst_day = day_rank[day_rank['cnt'] ==
+                     day_rank['cnt'].min()]['weekday'].values[0]
+best_day_rate = day_rank['cnt'].max()
+worst_day_rate = day_rank['cnt'].min()
 
 # Menunjukkan performa penjualan sepeda berdasarkan hari
 fig, ax = plt.subplots(figsize=(12, 6))
@@ -304,20 +410,19 @@ ax.set_ylabel("Jumlah sepeda (unit)", fontsize=15)
 ax.set_title("Rata - rata penggunaan sepeda per hari", fontsize=20, pad=20)
 st.pyplot(fig)
 
-st.markdown("""
+st.markdown(f"""
 # 🌟 **Insight**
 
-* Terlihat tidak ada perbedaan signifikan di antara setiap hari
-* Namun, hari dengan rata - rata penggunaan tertinggi ada pada hari Jumat dan terendah pada hari Minggu.
+* Terlihat bahwa rata - rata penggunaan sepeda paling tinggi ada di hari {best_day} dengan rerata {best_day_rate:.2f} dan paling rendah di hari {worst_day} dengan rerata {worst_day_rate:.2f}
 """)
 
 
-st.markdown("""
+st.markdown(f"""
 # 🖊️**Kesimpulan**
 
-- Penggunaan sepeda pada tahun 2012 cenderung mengalami peningkatan dibandingkan tahun 2011
-- Pada musim gugur, penggunaan sepeda mengalami pelonjakan. Sementara pada musim semi, penggunaan sepeda mengalami penurunan
-- Pada cuaca cerah, penggunaan sepeda cenderung tinggi. Sementara pada cuaca berkabut, penggunaan sepeda cenderung rendah
-- Jam dengan rata - rata penggunaan sepeda tertinggi adalah pukul 17.00 dan terendah pada pukul 04.00
-- Hari dengan rata - rata penggunaan sepeda tertinggi adalah hari Jumat dan terendah adalah hari Minggu
+{max_year != min_year and "- Penggunaan sepeda pada tahun 2012 cenderung mengalami peningkatan dibandingkan tahun 2011"}
+- Pada musim {best_season}, penggunaan sepeda mengalami pelonjakan dengan rerata {best_season_rate:.2f}. Sementara pada musim {worst_season}, penggunaan sepeda mengalami penurunan dengan rerata {worst_season_rate:.2f}
+- Pada cuaca {best_weather}, penggunaan sepeda cenderung tinggi dengan rerata {best_weather_rate:.2f}. Sementara pada cuaca {worst_weather}, penggunaan sepeda cenderung rendah dengan rerata {worst_weather_rate:.2f}
+- Jam dengan rata - rata penggunaan sepeda tertinggi adalah pukul {best_hour} dan terendah pada pukul {worst_hour}
+- Hari dengan rata - rata penggunaan sepeda tertinggi adalah hari {best_day} dengan rerata {best_day_rate:.2f} dan terendah adalah hari {worst_day} dengan reata {worst_day_rate:.2f}
 """)
